@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>Dashboard</h1>
+            <div class="header-actions">
+                <button class="btn-secondary" onclick="resetForm()">Reset</button>
+                <button class="btn-secondary" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Site Control</h2>
+            <p>Enable or disable the entire site</p>
+            <div class="site-control">
+                <button id="siteToggleBtn" class="btn-toggle" onclick="toggleSite()">
+                    <span id="siteStatusText">Loading...</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Auto-Copy Text</h2>
+            <p>This is the text that gets automatically copied to the visitor's clipboard when they land on the upgrade page.</p>
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="copyText">Copy Text</label>
+                    <textarea id="copyText" rows="6" placeholder="Enter the text to auto-copy..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn">Save</button>
+                </div>
+                <div id="saveMessage" class="save-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        var originalCopyText = '';
+        var siteEnabled = true;
+
+        async function loadSettings() {
+            try {
+                var response = await fetch('/admin/api/settings');
+                var settings = await response.json();
+                document.getElementById('copyText').value = settings.copy_text || '';
+                originalCopyText = settings.copy_text || '';
+                siteEnabled = settings.site_enabled !== 'false';
+                updateSiteToggleButton(siteEnabled);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        function updateSiteToggleButton(enabled) {
+            var btn = document.getElementById('siteToggleBtn');
+            var text = document.getElementById('siteStatusText');
+
+            if (enabled) {
+                btn.className = 'btn-toggle enabled';
+                text.textContent = 'Site Enabled';
+            } else {
+                btn.className = 'btn-toggle disabled';
+                text.textContent = 'Site Disabled';
+            }
+            btn.dataset.enabled = enabled;
+        }
+
+        async function toggleSite() {
+            var btn = document.getElementById('siteToggleBtn');
+            var currentState = btn.dataset.enabled === 'true';
+            var newState = !currentState;
+
+            btn.disabled = true;
+
+            try {
+                var resp = await fetch('/admin/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        copy_text: document.getElementById('copyText').value,
+                        site_enabled: newState
+                    })
+                });
+                if (!resp.ok) throw new Error('Failed');
+                siteEnabled = newState;
+                updateSiteToggleButton(newState);
+            } catch (error) {
+                alert('Error updating site status');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            var btn = e.target.querySelector('button');
+            var msg = document.getElementById('saveMessage');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            msg.textContent = '';
+            msg.className = 'save-message';
+
+            try {
+                var response = await fetch('/admin/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        copy_text: document.getElementById('copyText').value,
+                        site_enabled: siteEnabled
+                    })
+                });
+
+                var data = await response.json();
+                if (data.success) {
+                    originalCopyText = document.getElementById('copyText').value;
+                    msg.textContent = 'Saved successfully.';
+                    msg.className = 'save-message success';
+                } else {
+                    msg.textContent = 'Error saving.';
+                    msg.className = 'save-message error';
+                }
+            } catch (error) {
+                msg.textContent = 'Error saving.';
+                msg.className = 'save-message error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save';
+            }
+        });
+
+        function resetForm() {
+            document.getElementById('copyText').value = originalCopyText;
+        }
+
+        async function logout() {
+            await fetch('/admin/logout', { method: 'POST' });
+            window.location.href = '/admin/login';
+        }
+
+        loadSettings();
+    </script>
+</body>
+</html>
